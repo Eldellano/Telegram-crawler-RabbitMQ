@@ -21,8 +21,8 @@ app.add_middleware(
 )
 
 
-@app.get('/tg_all_messages/')
-async def convert_main(channel_name: str, request: Request):
+@app.get('/get_all_messages/')
+async def get_all_messages(channel_name: str):
     worker = Worker()
 
     if channel_name:
