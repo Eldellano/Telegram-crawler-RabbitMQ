@@ -2,7 +2,6 @@ import asyncio
 import base64
 import json
 import os
-from datetime import datetime
 
 from aiotdlib import Client, api
 from dotenv import load_dotenv
@@ -108,7 +107,6 @@ async def get_messages(channel_name: str, date_from: int = None, date_to: int = 
                     try:
                         for message_in_chat in all_messages:
                             # получение комментариев к посту
-                            print(f'{message_in_chat=}')
                             all_post_comments = list()
 
                             if date_from is not None:
