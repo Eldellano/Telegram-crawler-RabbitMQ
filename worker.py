@@ -33,9 +33,11 @@ class Worker:
         print(f'[x] Received {body=}')
         body = json.loads(body)
         channel_name = body.get('channel_name')
+        date_from = body.get('date_from')
+        date_to = body.get('date_to')
 
         # старт получения постов телеграм
-        asyncio.run(get_messages(channel_name))
+        asyncio.run(get_messages(channel_name, date_from, date_to))
 
         print(f'[x] Finish {body=}')
 
