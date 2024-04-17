@@ -12,11 +12,16 @@ load_dotenv()
 RABBIT_HOST = os.getenv('RABBITMQ_HOST')
 RABBIT_PORT = os.getenv('RABBITMQ_PORT')
 RABBIT_QUEUE = os.getenv('RABBITMQ_QUEUE')
+RABBIT_USER = os.getenv('RABBITMQ_USER')
+RABBIT_PASS = os.getenv('RABBITMQ_PASS')
 
 
 class Worker:
     def __init__(self):
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBIT_HOST, port=RABBIT_PORT))
+        credentials = pika.PlainCredentials(RABBIT_USER, RABBIT_PASS)
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBIT_HOST,
+                                                                            port=RABBIT_PORT,
+                                                                            credentials=credentials))
         self.channel = self.connection.channel()
         self.channel.queue_declare(queue=RABBIT_QUEUE)
         self.channel.basic_qos(prefetch_count=1)
