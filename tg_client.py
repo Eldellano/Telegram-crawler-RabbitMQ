@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import os
+from datetime import datetime
 
 from aiotdlib import Client, api
 from dotenv import load_dotenv
@@ -49,8 +50,6 @@ def save_messages(channel_name, messages: list):
 
         # сохранение результатов
         source_id = 2
-        print(f'{post=}')
-        print(f'{comments=}')
         saved_message_id = result_db.save_result_post(message_text, base64_message, source_id, tag)
 
         if comments:
@@ -70,7 +69,7 @@ def save_messages(channel_name, messages: list):
             result_db.save_result_comment(comments_for_save)
 
 
-async def get_messages(channel_name: str):
+async def get_messages(channel_name: str, date_from: int = None, date_to: int = None):
     """Получение и сохранение сообщений из канала/группы"""
 
     client = Tg().get_client()
@@ -80,8 +79,12 @@ async def get_messages(channel_name: str):
             chat = await client.api.search_public_chat(channel_name)  # получение id и прочей инфы о чате/канале
 
             channel_id = chat.id
-            last_message_id = chat.last_message.id
-            last_message_item = chat.last_message
+            if date_to is not None:
+                last_message_item = await client.api.get_chat_message_by_date(chat_id=chat.id, date=date_to)
+                last_message_id = last_message_item.id
+            else:
+                last_message_id = chat.last_message.id
+                last_message_item = chat.last_message
 
             all_messages = list()
             all_messages.append(last_message_item)
@@ -102,54 +105,71 @@ async def get_messages(channel_name: str):
                     for message_in_chat in messages:
                         all_messages.append(message_in_chat)
 
-                    for message_in_chat in all_messages:
-                        # получение комментариев к посту
+                    try:
+                        for message_in_chat in all_messages:
+                            # получение комментариев к посту
+                            print(f'{message_in_chat=}')
+                            all_post_comments = list()
 
-                        all_post_comments = list()
-                        if message_in_chat.can_get_message_thread is True:
-                            # print(f'Получение комментариев - {channel_name} - {last_message_id=}')
-                            last_comment_id = 0
+                            if date_from is not None:
+                                message_date = message_in_chat.date
+                                if message_date < date_from:
+                                    raise StopIteration('Дата сообщения меньше запрашиваемой')
 
-                            timeout_cnt = 0
-                            while True:
-                                print(
-                                    f'Получение комментариев - {channel_name} - {message_in_chat.id=} - {last_comment_id=}')
-                                if timeout_cnt >= 10:
-                                    print(f'TIMEOUT break {timeout_cnt=}')
-                                    break
+                            if message_in_chat.can_get_message_thread is True:
+                                last_comment_id = 0
 
-                                try:
-                                    comments_history = await client.api.get_message_thread_history(
-                                        chat_id=chat.id,
-                                        message_id=message_in_chat.id,
-                                        from_message_id=last_comment_id,
-                                        limit=100, offset=0,
-                                        request_timeout=30)
-
-                                    if comments_history:
-                                        for reply_comment in comments_history.messages:
-                                            all_post_comments.append(reply_comment)
-                                            last_comment_id = reply_comment.id
-                                    else:
+                                timeout_cnt = 0
+                                while True:
+                                    print(
+                                        f'Получение комментариев - {channel_name} - {message_in_chat.id=} - {last_comment_id=}')
+                                    if timeout_cnt >= 10:
+                                        print(f'TIMEOUT break {timeout_cnt=}')
                                         break
-                                except api.errors.error.AioTDLibError as comment_error:
-                                    if comment_error.message == 'Receive messages in an unexpected chat':
-                                        print(f'{len(all_post_comments)=} - {comment_error=}')
-                                        break
-                                except asyncio.exceptions.TimeoutError:
-                                    print(f'get_chat_history - TimeoutError')
-                                    timeout_cnt += 1
-                                    continue
-                                finally:
-                                    pass
 
-                        all_post_comments.reverse()
-                        to_save = {'post': message_in_chat,
-                                   'comments': all_post_comments}
+                                    try:
+                                        comments_history = await client.api.get_message_thread_history(
+                                            chat_id=chat.id,
+                                            message_id=message_in_chat.id,
+                                            from_message_id=last_comment_id,
+                                            limit=100, offset=0,
+                                            request_timeout=30)
 
-                        message_with_comments.append(to_save)
-                        last_message_id = message_in_chat.id
+                                        if comments_history:
+                                            for reply_comment in comments_history.messages:
+                                                all_post_comments.append(reply_comment)
+                                                last_comment_id = reply_comment.id
+                                        else:
+                                            break
+                                    except api.errors.error.AioTDLibError as comment_error:
+                                        if comment_error.message == 'Receive messages in an unexpected chat':
+                                            print(f'{len(all_post_comments)=} - {comment_error=}')
+                                            break
+                                    except asyncio.exceptions.TimeoutError:
+                                        print(f'get_chat_history - TimeoutError')
+                                        timeout_cnt += 1
+                                        continue
+                                    finally:
+                                        pass
 
+                            all_post_comments.reverse()
+                            to_save = {'post': message_in_chat,
+                                       'comments': all_post_comments}
+
+                            message_with_comments.append(to_save)
+                            last_message_id = message_in_chat.id
+                    except StopIteration as stop_iteration:
+                        # сохранение полученных данных и остановка получения всех сообщений (остановка while)
+                        print(f'{stop_iteration=}')
+                        print(f'{len(message_with_comments)=}')
+                        if message_with_comments:
+                            save_messages(channel_name, message_with_comments)
+                            message_with_comments.clear()
+
+                        all_messages.clear()
+                        break
+
+                    # сохранение всех сообщений и продолжение получения
                     if message_with_comments:
                         save_messages(channel_name, message_with_comments)
                         message_with_comments.clear()
@@ -169,5 +189,10 @@ async def get_messages(channel_name: str):
 
 
 if __name__ == '__main__':
-    channel_name = 'eldellano_channel_test'
+    # channel_name = 'eldellano_channel_test'
+    # channel_name = 'typodar'
+    channel_name = 'slavyansk'
+    date_from = 1711918800
+    date_to = 1713214800
+    asyncio.run(get_messages(channel_name, date_from, date_to))
     # asyncio.run(get_messages(channel_name))
