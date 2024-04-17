@@ -1,9 +1,9 @@
 import os
 from datetime import datetime, timedelta
-
+import re
 import uvicorn
 import json
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from worker import Worker
@@ -23,8 +23,21 @@ app.add_middleware(
 )
 
 
+def check_date(date: str) -> bool:
+    """Проверки формата полученной даты"""
+    if re.match(r"^\d{2}\.\d{2}\.\d{4}$", date):
+        return True
+    return False
+
+
 @app.get('/get_all_messages/')
 async def get_all_messages(channel_name: str):
+    """
+    Получение всех сообщений и комментариев из канала телеграм
+    :param channel_name: название канала
+    :return:
+    """
+
     worker = Worker()
 
     if channel_name:
@@ -38,7 +51,23 @@ async def get_all_messages(channel_name: str):
 
 
 @app.get('/get_messages_from_date/')
-async def get_messages_from_date(channel_name: str, date_from: str, date_to: str):
+async def get_messages_from_date(channel_name: str, date_from: str, date_to: str, response: Response):
+    """
+    Получение сообщений и комментариев из канала телеграм с указанием промежутка дат
+    :param channel_name: название канала
+    :param date_from: дата начала промежутка в виде 10.04.2024
+    :param date_to: дата конца промежутка в виде 17.04.2024
+    :param response:
+    :return:
+    """
+
+    if not check_date(date_from):
+        response.status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+        return 'Не верный формат указания начала промежутка. Дата должна соответствовать виду - dd.mm.yyyy'
+    if not check_date(date_to):
+        response.status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+        return 'Не верный формат указания конца промежутка. Дата должна соответствовать виду - dd.mm.yyyy'
+
     worker = Worker()
 
     date_from = int(datetime.timestamp(datetime.strptime(date_from, '%d.%m.%Y')))
@@ -47,8 +76,6 @@ async def get_messages_from_date(channel_name: str, date_from: str, date_to: str
     date_to = int(datetime.timestamp(date_to))
 
     if channel_name:
-        print(channel_name, date_from, date_to)
-
         task_params = {'channel_name': channel_name,
                        'date_from': date_from,
                        'date_to': date_to}
