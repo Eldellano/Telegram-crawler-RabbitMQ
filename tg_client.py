@@ -138,11 +138,13 @@ async def get_messages(channel_name: str, date_from: int = None, date_to: int = 
                                                 all_post_comments.append(reply_comment)
                                                 last_comment_id = reply_comment.id
                                         else:
+                                            print('comments_history is None break')
                                             break
                                     except api.errors.error.AioTDLibError as comment_error:
+                                        print(f'AioTDLibError: {comment_error}')
                                         if comment_error.message == 'Receive messages in an unexpected chat':
                                             print(f'{len(all_post_comments)=} - {comment_error=}')
-                                            break
+                                        break
                                     except asyncio.exceptions.TimeoutError:
                                         print(f'get_chat_history - TimeoutError')
                                         timeout_cnt += 1
